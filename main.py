@@ -1,5 +1,7 @@
 import discord
 from discord.ext import commands
+from collections import defaultdict
+from math import prod
 import os
 from dotenv import load_dotenv
 
@@ -26,61 +28,183 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
-def calculate_skillmod(hero_input):
-    total_damage = 0
-    total_defense = 0
-    total_oppdmg = 0
+def compute_factors_from_hero_counts(hero_counts):
+    """
+    hero_counts: dict e.g. {"Chenko": 4, "Amane": 2}
+    Returns per-category dict of {effect_op: total_pct} and final factors.
+    """
+    # Per-op sums
+    per_op = defaultdict(float)  # key: (category, op) -> sum of decimals
 
-    for hero, count in hero_input.items():
-        if hero not in HERO_DATA:
-            return None, None, None, hero  # error
+    for hero, count in hero_counts.items():
+        hero_norm = hero.strip()
+        if hero_norm not in HERO_DATA:
+            raise KeyError(hero_norm)
+        for (cat, op, pct) in HERO_DATA[hero_norm]:
+            per_op[(cat, op)] += pct * count
 
-        for effect, _, value in HERO_DATA[hero]:
-            buff_total = value * count
+    # Build list of factors per category: multiply across distinct ops
+    def category_factor(cat_name):
+        # Collect all ops for this category
+        factors = []
+        for (cat, op), total_pct in per_op.items():
+            if cat == cat_name:
+                factors.append(1.0 + total_pct)  # (1 + sum_pct_for_this_op)
+        return prod(factors) if factors else 1.0
 
-            if effect == "DamageUp":
-                total_damage += buff_total
-            elif effect == "DefenseUp":
-                total_defense += buff_total
-            elif effect == "OppDamageDown":
-                total_oppdmg += buff_total
+    dmg_factor = category_factor("DamageUp")
+    def_factor = category_factor("DefenseUp")
+    opp_def_factor = category_factor("OppDefenseDown")
+    opp_dmg_factor = category_factor("OppDamageDown")
 
-    skillmod = (1 + total_damage) * (1 + total_defense) * (1 - total_oppdmg)
-    dmg_change = ((1 + total_damage) * (1 - total_oppdmg) - 1) * 100
-    dmg_taken_change = ((1 / (1 + total_defense)) - 1) * 100
+    return {
+        "per_op": per_op,
+        "DamageUpFactor": dmg_factor,
+        "DefenseUpFactor": def_factor,
+        "OppDefenseDownFactor": opp_def_factor,
+        "OppDamageDownFactor": opp_dmg_factor
+    }
 
-    return skillmod, dmg_change, dmg_taken_change, None
+
+def calculate_skillmod(hero_counts):
+    """
+    Returns a result dict with SkillMod, percentage outputs, and friendly strings.
+    """
+    groups = compute_factors_from_hero_counts(hero_counts)
+    dmg_f = groups["DamageUpFactor"]
+    def_f = groups["DefenseUpFactor"]
+    opp_def_f = groups["OppDefenseDownFactor"]
+    opp_dmg_f = groups["OppDamageDownFactor"]
+
+    # SkillMod per article
+    skillmod = (dmg_f * opp_def_f) / (opp_dmg_f * def_f)
+
+    # Damage dealt % increase vs baseline
+    damage_percent_increase = (skillmod - 1.0) * 100.0
+
+    # Damage taken: enemy damage after your OppDamageDown (reduces enemy outgoing)
+    # and after your DefenseUp (reduces damage taken).
+    # We'll present both as:
+    #   final_damage_taken_multiplier = (1 / def_f) * (1 / opp_dmg_f_for_damage_taken)
+    # But opp_dmg_f currently is (1 + sums). For damage-taken reduction it's more natural to
+    # treat OppDamageDown as multiplicative reduction of enemy damage: factor = 1 / (1 + sum)
+    # That would double-count if you used opp_dmg_f both ways, so we'll compute enemy reduction factor:
+    if groups["OppDamageDownFactor"] != 0:
+        enemy_reduction_factor = 1.0 / groups["OppDamageDownFactor"]
+    else:
+        enemy_reduction_factor = 1.0
+
+    final_damage_taken_multiplier = (1.0 / def_f) * enemy_reduction_factor
+    damage_taken_percent_change = (final_damage_taken_multiplier -
+                                   1.0) * 100.0  # negative = less damage taken
+
+    return {
+        "SkillMod": skillmod,
+        "Damage%Increase": damage_percent_increase,
+        "FinalDamageTakenMultiplier": final_damage_taken_multiplier,
+        "DamageTaken%Change": damage_taken_percent_change,
+        "components": {
+            "DamageUpFactor": dmg_f,
+            "DefenseUpFactor": def_f,
+            "OppDefenseDownFactor": opp_def_f,
+            "OppDamageDownFactor": opp_dmg_f,
+            "per_op": groups["per_op"]
+        }
+    }
+
+
+# -------- Bot commands ----------
+@bot.command()
+async def heroes(ctx):
+    """List available heroes"""
+    rows = []
+    for h, effects in HERO_DATA.items():
+        e = ", ".join(f"{cat}:{op}({pct*100:.0f}%)"
+                      for (cat, op, pct) in effects)
+        rows.append(f"**{h}** — {e}")
+    text = "Available heroes (format = Category:effect_op(percent)):\n\n" + "\n".join(
+        rows)
+    await ctx.send(text)
 
 
 @bot.command()
 async def skillmod(ctx, *args):
-    hero_input = {}
+    """
+    Usage: !skillmod Chenko 4
+           !skillmod Chenko 2 Amane 2
+    """
+    # parse args pairs hero count
+    if len(args) == 0:
+        await ctx.send(
+            "Usage example: `!skillmod Chenko 4` or `!skillmod Chenko 2 Amane 2`.\nType `!heroes` for list."
+        )
+        return
+
+    # Accept either pairs or single token like "Chenko:4,Amane:2"
+    hero_counts = {}
     try:
-        for i in range(0, len(args), 2):
-            hero = args[i]
-            count = int(args[i + 1])
-            hero_input[hero] = count
-    except:
-        await ctx.send("❌ Usage example: `!skillmod Amane 2 Hilde 1 Saul 1`")
+        if len(args) == 1 and (":" in args[0] or "," in args[0]):
+            # parse "Chenko:2,Amane:2" style
+            part = args[0]
+            items = [
+                p.strip() for p in part.replace(",", " ").split() if p.strip()
+            ]
+            for it in items:
+                if ":" in it:
+                    name, cnt = it.split(":", 1)
+                    hero_counts[name.strip()] = hero_counts.get(
+                        name.strip(), 0) + int(cnt)
+                else:
+                    # single name -> count 1
+                    hero_counts[it] = hero_counts.get(it, 0) + 1
+        else:
+            # parse pairs
+            if len(args) % 2 != 0:
+                raise ValueError("Arguments must be pairs: hero count")
+            for i in range(0, len(args), 2):
+                name = args[i]
+                cnt = int(args[i + 1])
+                hero_counts[name] = hero_counts.get(name, 0) + cnt
+    except Exception as e:
+        await ctx.send(
+            "❌ Parse error. Use `!skillmod Chenko 4` or `!skillmod Chenko 2 Amane 2` or `!skillmod Chenko:4,Amane:2`"
+        )
         return
 
-    skillmod, dmg, defp, err = calculate_skillmod(hero_input)
+    # Normalize hero names case-insensitively to allowed keys
+    normalized = {}
+    for name, cnt in hero_counts.items():
+        matched = None
+        for h in HERO_DATA.keys():
+            if h.lower() == name.lower():
+                matched = h
+                break
+        if not matched:
+            await ctx.send(
+                f"❌ Unknown hero: `{name}`. Type `!heroes` for the full list.")
+            return
+        normalized[matched] = normalized.get(matched, 0) + cnt
 
-    if err:
-        await ctx.send(f"❌ Unknown hero: **{err}**\nType `!heroes` for list.")
-        return
+    # compute
+    res = calculate_skillmod(normalized)
 
-    await ctx.send(f"✨ **SkillMod:** `{skillmod:.4f}`\n"
-                   f"⚔️ **Damage:** `{dmg:+.2f}%`\n"
-                   f"🛡️ **Damage Taken:** `{defp:.2f}%`")
+    # prepare reply
+    comp = res["components"]
+    per_op_lines = []
+    for (cat, op), tot in comp["per_op"].items():
+        per_op_lines.append(f"{cat} op{op}: {tot*100:.1f}% (sum for that op)")
 
-
-@bot.command()
-async def heroes(ctx):
-    hero_list = ", ".join(HERO_DATA.keys())
-    await ctx.send(
-        f"🦸 **Available Joiner Heroes:**\n{hero_list}\n\nUse like:\n`!skillmod Amane 2 Hilde 1 Saul 1`"
-    )
+    reply = (
+        f"**SkillMod:** `{res['SkillMod']:.4f}`\n"
+        f"**Damage dealt:** `+{res['Damage%Increase']:.1f}%`\n"
+        f"**Damage taken:** `{res['FinalDamageTakenMultiplier']:.3f}×` ({res['DamageTaken%Change']:.1f}% change)\n\n"
+        f"**Components:**\n"
+        f"- DamageUp factor: {comp['DamageUpFactor']:.3f}\n"
+        f"- DefenseUp factor: {comp['DefenseUpFactor']:.3f}\n"
+        f"- OppDefenseDown factor: {comp['OppDefenseDownFactor']:.3f}\n"
+        f"- OppDamageDown factor: {comp['OppDamageDownFactor']:.3f}\n\n"
+        f"Per-effect_op sums:\n" + "\n".join(per_op_lines))
+    await ctx.send(reply)
 
 
 bot_token = os.getenv("DISCORD_BOT_TOKEN")
