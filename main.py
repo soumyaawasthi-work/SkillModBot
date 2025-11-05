@@ -122,8 +122,12 @@ async def heroes(ctx):
         e = ", ".join(f"{cat}:{op}({pct*100:.0f}%)"
                       for (cat, op, pct) in effects)
         rows.append(f"**{h}** — {e}")
-    text = "Available heroes (format = Category:effect_op(percent)):\n\n" + "\n".join(
-        rows)
+    text = (
+        "Available heroes (format = Category:effect_op(percent)):\n\n" +
+        "\n".join(rows) +
+        "\n\nNote: If you stack joiners with the same effect but different effect_op, "
+        "you’ll get a stronger SkillMod than if you use heroes with the same effect "
+        "and same effect_op.")
     await ctx.send(text)
 
 
