@@ -365,9 +365,9 @@ async def slash_hero(interaction: discord.Interaction, name: str):
     await interaction.followup.send(text, ephemeral=True)
 
 
-# /skillmod with up to 6 hero slots (each optional). Autocomplete for each hero
+# /skillmod with up to 4 hero slots (each optional). Autocomplete for each hero
 @tree.command(name="skillmod",
-              description="Calculate SkillMod for up to 6 joiner heroes")
+              description="Calculate SkillMod for up to 4 joiner heroes")
 @app_commands.describe(
     hero1="Hero 1",
     count1="Count for hero 1",
@@ -377,17 +377,11 @@ async def slash_hero(interaction: discord.Interaction, name: str):
     count3="Count for hero 3",
     hero4="Hero 4",
     count4="Count for hero 4",
-    hero5="Hero 5",
-    count5="Count for hero 5",
-    hero6="Hero 6",
-    count6="Count for hero 6",
 )
 @app_commands.autocomplete(hero1=hero_autocomplete,
                            hero2=hero_autocomplete,
                            hero3=hero_autocomplete,
-                           hero4=hero_autocomplete,
-                           hero5=hero_autocomplete,
-                           hero6=hero_autocomplete)
+                           hero4=hero_autocomplete)
 async def slash_skillmod(
     interaction: discord.Interaction,
     hero1: Optional[str] = None,
@@ -398,10 +392,6 @@ async def slash_skillmod(
     count3: int = 1,
     hero4: Optional[str] = None,
     count4: int = 1,
-    hero5: Optional[str] = None,
-    count5: int = 1,
-    hero6: Optional[str] = None,
-    count6: int = 1,
 ):
     await interaction.response.defer()
     try:
@@ -410,8 +400,6 @@ async def slash_skillmod(
             hero2: count2,
             hero3: count3,
             hero4: count4,
-            hero5: count5,
-            hero6: count6,
         }
         normalized = parse_pairs_input(pairs)
     except KeyError as e:
@@ -541,35 +529,20 @@ async def listpresets(interaction: discord.Interaction):
 # ---------------------------
 # Register / sync on ready
 # ---------------------------
-import discord
-import os
-
 # Confirm your environment is loading correctly
-print("Environment check:")
-print("DISCORD_BOT_TOKEN present:", bool(os.getenv("DISCORD_BOT_TOKEN")))
-print("GUILD_ID:", os.getenv("GUILD_ID"))
-
-# Prepare the guild object
-GUILD_ID = os.getenv("GUILD_ID")
-GUILD = discord.Object(id=int(GUILD_ID)) if GUILD_ID else None
-
 
 @bot.event
 async def on_ready():
     print(f"✅ Bot logged in as {bot.user} (id: {bot.user.id})")
-
     try:
         if GUILD:
-            print(f"Attempting to sync commands to guild {GUILD_ID}...")
-            synced = await tree.sync(guild=GUILD)
-            print(f"✅ Synced {len(synced)} commands to guild {GUILD_ID}")
+            await tree.sync(guild=GUILD)
+            print(f"✅ Synced commands to guild {GUILD_ID}")
         else:
-            print("⚠️ GUILD not defined. Syncing globally (may take up to 1 hour)...")
-            synced = await tree.sync()
-            print(f"✅ Synced {len(synced)} global commands")
+            await tree.sync()
+            print("✅ Synced global commands (may take up to an hour).")
     except Exception as e:
         print("❌ Failed to sync slash commands:", e)
-
 
 # ---------------------------
 # Run
