@@ -9,8 +9,8 @@ from discord import app_commands
 from discord.ext import commands
 from collections import defaultdict
 from math import prod
-import asyncio
 from typing import Optional
+import json
 
 # ---------------------------
 # Hero data (confirmed values)
@@ -33,6 +33,46 @@ HERO_DATA = {
 
 # list for autocomplete
 HERO_NAMES = sorted(HERO_DATA.keys(), key=lambda s: s.lower())
+
+# ---------------------------
+# Preset management
+# ---------------------------
+
+PRESET_FILE = "presets.json"
+
+
+def load_all_presets():
+    if not os.path.exists(PRESET_FILE):
+        return {}
+    try:
+        with open(PRESET_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_all_presets(data):
+    with open(PRESET_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def save_user_preset(user_id: str, name: str, team_string: str):
+    presets = load_all_presets()
+    user_presets = presets.get(user_id, {})
+    user_presets[name] = team_string
+    presets[user_id] = user_presets
+    save_all_presets(presets)
+
+
+def load_user_preset(user_id: str, name: str):
+    presets = load_all_presets()
+    return presets.get(user_id, {}).get(name)
+
+
+def list_user_presets(user_id: str):
+    presets = load_all_presets()
+    return list(presets.get(user_id, {}).keys())
+
 
 # ---------------------------
 # Math functions (per article)
@@ -441,6 +481,57 @@ async def slash_compare(interaction: discord.Interaction, team_a: str,
         f"{winner} wins (Team B is {delta:.1f}% {'higher' if delta>0 else 'lower'} than Team A)",
         inline=False)
     await interaction.followup.send(embed=embed)
+
+
+@tree.command(name="savepreset", description="Save a team preset under a name")
+@app_commands.describe(name="Preset name",
+                       heroes="Heroes list, e.g. Chenko:4,Amane:2")
+async def savepreset(interaction: discord.Interaction, name: str, heroes: str):
+    try:
+        _ = parse_compact_string(heroes)  # validate
+    except Exception as e:
+        await interaction.response.send_message(
+            "Invalid format. Use `Hero:count,Hero:count`.", ephemeral=True)
+        return
+    save_user_preset(str(interaction.user.id), name, heroes)
+    await interaction.response.send_message(f"✅ Preset `{name}` saved!",
+                                            ephemeral=True)
+
+
+@tree.command(name="loadpreset",
+              description="Load a saved preset and calculate it")
+@app_commands.describe(name="Preset name")
+async def loadpreset(interaction: discord.Interaction, name: str):
+    saved = load_user_preset(str(interaction.user.id), name)
+    if not saved:
+        avail = list_user_presets(str(interaction.user.id))
+        msg = "You have no preset by that name."
+        if avail:
+            msg += f" Your presets: {', '.join(avail)}"
+        await interaction.response.send_message(msg, ephemeral=True)
+        return
+    try:
+        hero_counts = parse_compact_string(saved)
+        res = calculate_skillmod(hero_counts)
+        embed = build_skillmod_embed(interaction.user.display_name,
+                                     hero_counts, res)
+        embed.title = f"Preset: {name}"
+        await interaction.response.send_message(embed=embed)
+    except Exception:
+        await interaction.response.send_message("Error reading preset.",
+                                                ephemeral=True)
+
+
+@tree.command(name="listpresets", description="List your saved team presets")
+async def listpresets(interaction: discord.Interaction):
+    names = list_user_presets(str(interaction.user.id))
+    if not names:
+        await interaction.response.send_message(
+            "You have no saved presets yet. Use /savepreset.", ephemeral=True)
+        return
+    await interaction.response.send_message("📚 Your presets:\n" +
+                                            "\n".join(f"- {n}" for n in names),
+                                            ephemeral=True)
 
 
 # ---------------------------
