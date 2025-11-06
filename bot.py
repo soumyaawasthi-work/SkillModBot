@@ -339,15 +339,16 @@ intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
-# Optional: use a guild for fast command registration; set GUILD_ID in env if desired
-guild_param = []
-guild_ids_str = os.getenv("GUILD_ID", "")
-for gid in guild_ids_str.split(","):
+# Comma-separated list of guild IDs, e.g. "1436057938870534178,123456789012345678"
+GUILD_IDS = os.getenv("GUILD_IDS", "")
+GUILDS = []
+for gid in GUILD_IDS.split(","):
     gid = gid.strip()
     if gid:
-        guilds.append(discord.Object(id=int(gid)))
+        GUILDS.append(discord.Object(id=int(gid)))
 
-guild_param = guilds if guilds else None
+# Optional: fallback for global commands if no guilds specified
+GUILDS_PARAM = GUILDS if GUILDS else None
 
 
 # ---------------------------
@@ -463,7 +464,7 @@ def build_skillmod_embed(username, hero_counts, result):
 
 # /help
 @tree.command(name="help_skillmod",
-              description="Show help for the SkillMod calculator", guilds=guild_param)
+              description="Show help for the SkillMod calculator", guilds=GUILDS_PARAM)
 async def help_skillmod(interaction: discord.Interaction):
     await interaction.response.send_message(
         "**SkillMod Bot Help**\n\n"
@@ -503,7 +504,7 @@ async def help_skillmod(interaction: discord.Interaction):
 
 
 # /hero <name>
-@tree.command(name="hero", description="Get info about a specific joiner hero", guilds=guild_param)
+@tree.command(name="hero", description="Get info about a specific joiner hero", guilds=GUILDS_PARAM)
 @app_commands.describe(name="Hero name")
 @app_commands.autocomplete(name=hero_autocomplete)
 async def slash_hero(interaction: discord.Interaction, name: str):
@@ -530,7 +531,7 @@ async def slash_hero(interaction: discord.Interaction, name: str):
 
 # /skillmod with up to 4 hero slots (each optional). Autocomplete for each hero
 @tree.command(name="skillmod",
-              description="Calculate SkillMod for up to 4 joiner heroes", guilds=guild_param)
+              description="Calculate SkillMod for up to 4 joiner heroes", guilds=GUILDS_PARAM)
 @app_commands.describe(
     hero1="Hero 1",
     count1="Count for hero 1",
@@ -591,7 +592,7 @@ async def slash_skillmod(
 
 # /compare team_a team_b
 @tree.command(name="compare",
-              description="Compare two teams. Use format: Chenko:4,Amane:2", guilds=guild_param)
+              description="Compare two teams. Use format: Chenko:4,Amane:2", guilds=GUILDS_PARAM)
 @app_commands.describe(team_a="Team A (e.g. Chenko:4,Amane:2)",
                        team_b="Team B (e.g. Chenko:2,Amane:2)")
 async def slash_compare(interaction: discord.Interaction, team_a: str,
@@ -637,7 +638,7 @@ async def slash_compare(interaction: discord.Interaction, team_a: str,
 
 
 # /savepreset name: <username> heroes: <hero name>:<hero count>, <hero name>: <hero count>
-@tree.command(name="savepreset", description="Save a team preset under a name", guilds=guild_param)
+@tree.command(name="savepreset", description="Save a team preset under a name", guilds=GUILDS_PARAM)
 @app_commands.describe(name="Preset name",
                        heroes="Heroes list, e.g. Chenko:4,Amane:2")
 async def savepreset(interaction: discord.Interaction, name: str, heroes: str):
@@ -654,7 +655,7 @@ async def savepreset(interaction: discord.Interaction, name: str, heroes: str):
 
 # /loadpreset name: <username>
 @tree.command(name="loadpreset",
-              description="Load a saved preset and calculate it", guilds=guild_param)
+              description="Load a saved preset and calculate it", guilds=GUILDS_PARAM)
 @app_commands.describe(name="Preset name")
 async def loadpreset(interaction: discord.Interaction, name: str):
     saved = load_user_preset(str(interaction.user.id), name)
@@ -679,7 +680,7 @@ async def loadpreset(interaction: discord.Interaction, name: str):
 
 
 # /listpresets
-@tree.command(name="listpresets", description="List your saved team presets", guilds=guild_param)
+@tree.command(name="listpresets", description="List your saved team presets", guilds=GUILDS_PARAM)
 async def listpresets(interaction: discord.Interaction):
     names = list_user_presets(str(interaction.user.id))
     if not names:
@@ -694,7 +695,7 @@ async def listpresets(interaction: discord.Interaction):
 # /recommend
 @tree.command(
     name="recommend",
-    description="Suggest best joiner setups for attack and garrison", guilds=guild_param
+    description="Suggest best joiner setups for attack and garrison", guilds=GUILDS_PARAM
 )
 @app_commands.describe(
     heroes="(Optional) List your available heroes, e.g., Chenko:3,Amane:2"
@@ -759,14 +760,13 @@ async def recommend(interaction: discord.Interaction, heroes: str = None):
 # Register / sync on ready
 # --------------------------
 
-
 @bot.event
 async def on_ready():
     print(f"✅ Bot logged in as {bot.user} (id: {bot.user.id})")
     print(f"Loaded slash commands: {[cmd.name for cmd in bot.tree.get_commands()]}")
 
-    if guilds:
-        for g in guilds:
+    if GUILDS:
+        for g in GUILDS:
             try:
                 synced = await bot.tree.sync(guild=g)
                 print(f"✅ Synced {len(synced)} commands for guild {g.id}")
@@ -781,7 +781,6 @@ async def on_ready():
             print("❌ Failed to sync global commands:", e)
 
     print("✅ Ready to serve multiple guilds!")
-
 
 # ---------------------------
 # Run
