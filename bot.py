@@ -217,6 +217,16 @@ def parse_compact_string(s: str):
         hero_counts[matched] = hero_counts.get(matched, 0) + cnt
     return hero_counts
 
+def adapt_skillmod_for_embed(res):
+    return {
+        "damage_factor": res["SkillMod"],
+        "defense_factor": res["FinalDamageTakenMultiplier"],
+        "damageup_factor": res["components"]["DamageUpFactor"],
+        "defenseup_factor": res["components"]["DefenseUpFactor"],
+        "oppdefensedown_factor": res["components"]["OppDefenseDownFactor"],
+        "oppdamagedown_factor": res["components"]["OppDamageDownFactor"],
+        "effect_op_totals": res["components"]["per_op"],
+    }
 
 # ---------------------------
 # Recommendation Management
@@ -559,8 +569,9 @@ async def slash_skillmod(
         return
 
     res = calculate_skillmod(normalized)
+    embed_result = adapt_skillmod_for_embed(res)
     embed = build_skillmod_embed(interaction.user.display_name, normalized,
-                                 res)
+                                 embed_result)
     await interaction.followup.send(embed=embed)
 
 
@@ -643,8 +654,9 @@ async def loadpreset(interaction: discord.Interaction, name: str):
     try:
         hero_counts = parse_compact_string(saved)
         res = calculate_skillmod(hero_counts)
+        embed_result = adapt_skillmod_for_embed(res)
         embed = build_skillmod_embed(interaction.user.display_name,
-                                     hero_counts, res)
+                                     hero_counts, embed_result)
         embed.title = f"Preset: {name}"
         await interaction.response.send_message(embed=embed)
     except Exception:
