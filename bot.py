@@ -534,6 +534,7 @@ async def listpresets(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     print(f"✅ Bot logged in as {bot.user} (id: {bot.user.id})")
+    print(f"Loaded slash commands: {[cmd.name for cmd in tree.get_commands()]}")
     try:
         if GUILD:
             print(f"Attempting to sync commands to guild {GUILD_ID}...")
