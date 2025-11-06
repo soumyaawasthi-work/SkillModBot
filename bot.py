@@ -74,99 +74,6 @@ def list_user_presets(user_id: str):
     presets = load_all_presets()
     return list(presets.get(user_id, {}).keys())
 
-# ---------------------------
-# Recommendation Management
-# ---------------------------
-
-
-RECOMMEND_CACHE_FILE = "recommend_cache.json"
-
-def load_recommend_cache():
-    """Load cached global best formations."""
-    if not os.path.exists(RECOMMEND_CACHE_FILE):
-        return {}
-    with open(RECOMMEND_CACHE_FILE, "r") as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return {}
-
-
-def save_recommend_cache(data):
-    """Save cached results."""
-    with open(RECOMMEND_CACHE_FILE, "w") as f:
-        json.dump(data, f)
-
-
-def parse_roster_string(roster_str):
-    """Parse 'Chenko:3,Amane:2' into dict."""
-    heroes = {}
-    parts = roster_str.split(",")
-    for p in parts:
-        if not p.strip():
-            continue
-        try:
-            name, count = p.split(":")
-            heroes[name.strip()] = int(count.strip())
-        except ValueError:
-            raise ValueError(f"Invalid format near '{p}'")
-    return heroes
-
-
-def generate_combinations(roster_counts, max_size=4):
-    """Generate all combinations within hero limits."""
-    names = list(roster_counts.keys())
-    combos = set()
-
-    def helper(prefix, start):
-        if len(prefix) == max_size:
-            combos.add(tuple(sorted(prefix)))
-            return
-        for i in range(start, len(names)):
-            hero = names[i]
-            if prefix.count(hero) < roster_counts[hero]:
-                helper(prefix + [hero], i)
-
-    helper([], 0)
-    return combos
-
-
-def get_best_formations(roster_counts=None):
-    """Compute best 2 formations for attack and garrison."""
-    all_heroes = roster_counts or {name: 4 for name in HERO_DATA.keys()}
-
-    combos = generate_combinations(all_heroes, max_size=4)
-    results = []
-
-    for combo in combos:
-        hero_counts = {h: combo.count(h) for h in set(combo)}
-        res = calculate_skillmod(hero_counts)
-        results.append({
-            "heroes": hero_counts,
-            "skillmod": res["skillmod"],
-            "damage_pct": res["damage_dealt_change"],
-            "taken_pct": res["damage_taken_change"],
-        })
-
-    # Attack ranking → highest damage%
-    best_attack = sorted(results, key=lambda x: x["damage_pct"], reverse=True)[:2]
-    # Garrison ranking → lowest damage taken%
-    best_garrison = sorted(results, key=lambda x: x["taken_pct"])[:2]
-
-    return best_attack, best_garrison
-
-
-def format_formations(sets):
-    lines = []
-    for i, s in enumerate(sets, 1):
-        heroes = ", ".join(f"{h}×{c}" for h, c in s["heroes"].items())
-        dmg = s["damage_pct"]
-        taken = s["taken_pct"]
-        sm = s["skillmod"]
-        lines.append(
-            f"**{i}.** {heroes} — SkillMod `{sm:.3f}×`\n💥 Damage: `{dmg:+.1f}%`, 🛡️ Damage Taken: `{taken:+.1f}%`"
-        )
-    return "\n\n".join(lines) if lines else "No valid formations found."
 
 # ---------------------------
 # Math functions (per article)
@@ -311,6 +218,101 @@ def parse_compact_string(s: str):
 
 
 # ---------------------------
+# Recommendation Management
+# ---------------------------
+
+
+RECOMMEND_CACHE_FILE = "recommend_cache.json"
+
+def load_recommend_cache():
+    """Load cached global best formations."""
+    if not os.path.exists(RECOMMEND_CACHE_FILE):
+        return {}
+    with open(RECOMMEND_CACHE_FILE, "r") as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return {}
+
+
+def save_recommend_cache(data):
+    """Save cached results."""
+    with open(RECOMMEND_CACHE_FILE, "w") as f:
+        json.dump(data, f)
+
+
+def parse_roster_string(roster_str):
+    """Parse 'Chenko:3,Amane:2' into dict."""
+    heroes = {}
+    parts = roster_str.split(",")
+    for p in parts:
+        if not p.strip():
+            continue
+        try:
+            name, count = p.split(":")
+            heroes[name.strip()] = int(count.strip())
+        except ValueError:
+            raise ValueError(f"Invalid format near '{p}'")
+    return heroes
+
+
+def generate_combinations(roster_counts, max_size=4):
+    """Generate all combinations within hero limits."""
+    names = list(roster_counts.keys())
+    combos = set()
+
+    def helper(prefix, start):
+        if len(prefix) == max_size:
+            combos.add(tuple(sorted(prefix)))
+            return
+        for i in range(start, len(names)):
+            hero = names[i]
+            if prefix.count(hero) < roster_counts[hero]:
+                helper(prefix + [hero], i)
+
+    helper([], 0)
+    return combos
+
+
+def get_best_formations(roster_counts=None):
+    """Compute best 2 formations for attack and garrison."""
+    all_heroes = roster_counts or {name: 4 for name in HERO_DATA.keys()}
+
+    combos = generate_combinations(all_heroes, max_size=4)
+    results = []
+
+    for combo in combos:
+        hero_counts = {h: combo.count(h) for h in set(combo)}
+        res = calculate_skillmod(hero_counts)
+        results.append({
+            "heroes": hero_counts,
+            "skillmod": res["skillmod"],
+            "damage_pct": res["damage_dealt_change"],
+            "taken_pct": res["damage_taken_change"],
+        })
+
+    # Attack ranking → highest damage%
+    best_attack = sorted(results, key=lambda x: x["damage_pct"], reverse=True)[:2]
+    # Garrison ranking → lowest damage taken%
+    best_garrison = sorted(results, key=lambda x: x["taken_pct"])[:2]
+
+    return best_attack, best_garrison
+
+
+def format_formations(sets):
+    lines = []
+    for i, s in enumerate(sets, 1):
+        heroes = ", ".join(f"{h}×{c}" for h, c in s["heroes"].items())
+        dmg = s["damage_pct"]
+        taken = s["taken_pct"]
+        sm = s["skillmod"]
+        lines.append(
+            f"**{i}.** {heroes} — SkillMod `{sm:.3f}×`\n💥 Damage: `{dmg:+.1f}%`, 🛡️ Damage Taken: `{taken:+.1f}%`"
+        )
+    return "\n\n".join(lines) if lines else "No valid formations found."
+
+
+# ---------------------------
 # Bot setup
 # ---------------------------
 
@@ -321,8 +323,6 @@ tree = bot.tree
 # Optional: use a guild for fast command registration; set GUILD_ID in env if desired
 GUILD_ID = os.getenv("GUILD_ID")
 GUILD = discord.Object(id=int(GUILD_ID)) if GUILD_ID else None
-guild_param = [GUILD] if GUILD else None
-
 
 # ---------------------------
 # Autocomplete helper
@@ -437,7 +437,7 @@ def build_skillmod_embed(username, hero_counts, result):
 
 # /help
 @tree.command(name="help_skillmod",
-              description="Show help for the SkillMod calculator", guilds=guild_param)
+              description="Show help for the SkillMod calculator")
 async def help_skillmod(interaction: discord.Interaction):
     await interaction.response.send_message(
         "**SkillMod Bot Help**\n\n"
@@ -477,7 +477,7 @@ async def help_skillmod(interaction: discord.Interaction):
 
 
 # /hero <name>
-@tree.command(name="hero", description="Get info about a specific joiner hero", guilds=guild_param)
+@tree.command(name="hero", description="Get info about a specific joiner hero")
 @app_commands.describe(name="Hero name")
 @app_commands.autocomplete(name=hero_autocomplete)
 async def slash_hero(interaction: discord.Interaction, name: str):
@@ -504,7 +504,7 @@ async def slash_hero(interaction: discord.Interaction, name: str):
 
 # /skillmod with up to 4 hero slots (each optional). Autocomplete for each hero
 @tree.command(name="skillmod",
-              description="Calculate SkillMod for up to 4 joiner heroes", guilds=guild_param)
+              description="Calculate SkillMod for up to 4 joiner heroes")
 @app_commands.describe(
     hero1="Hero 1",
     count1="Count for hero 1",
@@ -564,7 +564,7 @@ async def slash_skillmod(
 
 # /compare team_a team_b
 @tree.command(name="compare",
-              description="Compare two teams. Use format: Chenko:4,Amane:2", guilds=guild_param)
+              description="Compare two teams. Use format: Chenko:4,Amane:2")
 @app_commands.describe(team_a="Team A (e.g. Chenko:4,Amane:2)",
                        team_b="Team B (e.g. Chenko:2,Amane:2)")
 async def slash_compare(interaction: discord.Interaction, team_a: str,
@@ -610,7 +610,7 @@ async def slash_compare(interaction: discord.Interaction, team_a: str,
 
 
 # /savepreset name: <username> heroes: <hero name>:<hero count>, <hero name>: <hero count>
-@tree.command(name="savepreset", description="Save a team preset under a name", guilds=guild_param)
+@tree.command(name="savepreset", description="Save a team preset under a name")
 @app_commands.describe(name="Preset name",
                        heroes="Heroes list, e.g. Chenko:4,Amane:2")
 async def savepreset(interaction: discord.Interaction, name: str, heroes: str):
@@ -627,7 +627,7 @@ async def savepreset(interaction: discord.Interaction, name: str, heroes: str):
 
 # /loadpreset name: <username>
 @tree.command(name="loadpreset",
-              description="Load a saved preset and calculate it", guilds=guild_param)
+              description="Load a saved preset and calculate it")
 @app_commands.describe(name="Preset name")
 async def loadpreset(interaction: discord.Interaction, name: str):
     saved = load_user_preset(str(interaction.user.id), name)
@@ -651,7 +651,7 @@ async def loadpreset(interaction: discord.Interaction, name: str):
 
 
 # /listpresets
-@tree.command(name="listpresets", description="List your saved team presets", guilds=guild_param)
+@tree.command(name="listpresets", description="List your saved team presets")
 async def listpresets(interaction: discord.Interaction):
     names = list_user_presets(str(interaction.user.id))
     if not names:
@@ -666,7 +666,7 @@ async def listpresets(interaction: discord.Interaction):
 # /recommend
 @tree.command(
     name="recommend",
-    description="Suggests top 2 team formations for attack and garrison. Use heroes:Chenko:3,Amane:2 to limit to your roster.", guilds=guild_param
+    description="Suggests top 2 team formations for attack and garrison. Use heroes:Chenko:3,Amane:2 to limit to your roster."
 )
 @app_commands.describe(
     heroes="(Optional) List your available heroes, e.g., Chenko:3,Amane:2"
@@ -727,10 +727,10 @@ async def recommend(interaction: discord.Interaction, heroes: str = None):
 
     await interaction.followup.send(embed=embed)
     
-# ---------------------------
+# --------------------------
 # Register / sync on ready
-# ---------------------------
-# Confirm your environment is loading correctly
+# --------------------------
+
 
 @bot.event
 async def on_ready():
