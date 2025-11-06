@@ -10,6 +10,7 @@ from discord.ext import commands
 from collections import defaultdict
 from math import prod
 import asyncio
+from typing import Optional
 
 # ---------------------------
 # Hero data (confirmed values)
@@ -348,17 +349,17 @@ async def slash_hero(interaction: discord.Interaction, name: str):
                            hero6=hero_autocomplete)
 async def slash_skillmod(
     interaction: discord.Interaction,
-    hero1: str = None,
+    hero1: Optional[str] = None,
     count1: int = 1,
-    hero2: str = None,
+    hero2: Optional[str] = None,
     count2: int = 1,
-    hero3: str = None,
+    hero3: Optional[str] = None,
     count3: int = 1,
-    hero4: str = None,
+    hero4: Optional[str] = None,
     count4: int = 1,
-    hero5: str = None,
+    hero5: Optional[str] = None,
     count5: int = 1,
-    hero6: str = None,
+    hero6: Optional[str] = None,
     count6: int = 1,
 ):
     await interaction.response.defer()
@@ -453,7 +454,7 @@ async def on_ready():
     try:
         if GUILD:
             await tree.sync(guild=GUILD)
-            print(f"Slash commands synced to guild {GUILD.id}")
+            print(f"Slash commands synced to guild {GUILD_ID}")
         else:
             await tree.sync()
             print(
