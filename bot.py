@@ -739,7 +739,7 @@ async def on_ready():
     try:
         if GUILD:
             print(f"Attempting to sync commands to guild {GUILD_ID}...")
-            await tree.clear_commands(guild=GUILD)
+            tree.clear_commands(guild=GUILD)
             synced = await tree.sync(guild=GUILD)
             print(f"✅ Synced {len(synced)} commands to guild {GUILD_ID}")
         else:
