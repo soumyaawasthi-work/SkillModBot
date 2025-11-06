@@ -541,7 +541,8 @@ async def listpresets(interaction: discord.Interaction):
 # ---------------------------
 # Register / sync on ready
 # ---------------------------
-
+GUILD_ID = os.getenv("GUILD_ID")
+GUILD = discord.Object(id=int(GUILD_ID)) if GUILD_ID else None
 
 @bot.event
 async def on_ready():
