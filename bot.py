@@ -740,12 +740,11 @@ async def on_ready():
     try:
         if GUILD:
             print(f"Attempting to CLEAR and SYNC commands for guild {GUILD_ID}...")
-            tree.clear_commands(guild=GUILD)
-            await tree.sync(guild=GUILD)
-            print(f"✅ Commands cleared and re-synced for guild {GUILD_ID}")
+            synced = await tree.sync(guild=GUILD)
+            print(f"✅ Synced {length(synced)} commands for guild {GUILD_ID}")
         else:
             print("⚠️ GUILD not defined. Syncing globally (may take up to 1 hour)...")
-            await tree.clear_commands()
+            tree.clear_commands()
             await tree.sync()
             print("✅ Cleared and synced global commands")
     except Exception as e:
