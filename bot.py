@@ -739,16 +739,18 @@ async def on_ready():
     print(f"Loaded slash commands: {[cmd.name for cmd in tree.get_commands()]}")
     try:
         if GUILD:
-            print(f"Attempting to sync commands to guild {GUILD_ID}...")
+            print(f"Attempting to CLEAR and SYNC commands for guild {GUILD_ID}...")
             tree.clear_commands(guild=GUILD)
-            synced = await tree.sync(guild=GUILD)
-            print(f"✅ Synced {len(synced)} commands to guild {GUILD_ID}")
+            await tree.sync(guild=GUILD)
+            print(f"✅ Commands cleared and re-synced for guild {GUILD_ID}")
         else:
             print("⚠️ GUILD not defined. Syncing globally (may take up to 1 hour)...")
-            synced = await tree.sync()
-            print(f"✅ Synced {len(synced)} global commands")
+            await tree.clear_commands()
+            await tree.sync()
+            print("✅ Cleared and synced global commands")
     except Exception as e:
         print("❌ Failed to sync slash commands:", e)
+
 
 # ---------------------------
 # Run
