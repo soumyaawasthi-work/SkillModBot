@@ -541,25 +541,34 @@ async def listpresets(interaction: discord.Interaction):
 # ---------------------------
 # Register / sync on ready
 # ---------------------------
+import discord
+import os
+
+# Confirm your environment is loading correctly
+print("Environment check:")
+print("DISCORD_BOT_TOKEN present:", bool(os.getenv("DISCORD_BOT_TOKEN")))
+print("GUILD_ID:", os.getenv("GUILD_ID"))
+
+# Prepare the guild object
+GUILD_ID = os.getenv("GUILD_ID")
+GUILD = discord.Object(id=int(GUILD_ID)) if GUILD_ID else None
+
 
 @bot.event
 async def on_ready():
-    print(f"Bot logged in as {bot.user} (id: {bot.user.id})")
+    print(f"✅ Bot logged in as {bot.user} (id: {bot.user.id})")
 
     try:
-        guild_id = os.getenv("GUILD_ID")
-        if not guild_id:
-            print("❌ No GUILD_ID found in environment variables.")
-            return
-
-        guild_id_int = int(guild_id)
-        guild = discord.Object(id=guild_id_int)
-        print(f"Attempting to sync commands to guild {guild_id_int}")
-        synced = await tree.sync(guild=guild)
-        print(f"✅ Synced {len(synced)} commands to guild {guild_id_int}")
-
+        if GUILD:
+            print(f"Attempting to sync commands to guild {GUILD_ID}...")
+            synced = await tree.sync(guild=GUILD)
+            print(f"✅ Synced {len(synced)} commands to guild {GUILD_ID}")
+        else:
+            print("⚠️ GUILD not defined. Syncing globally (may take up to 1 hour)...")
+            synced = await tree.sync()
+            print(f"✅ Synced {len(synced)} global commands")
     except Exception as e:
-        print(f"❌ Failed to sync slash commands: {e}")
+        print("❌ Failed to sync slash commands:", e)
 
 
 # ---------------------------
