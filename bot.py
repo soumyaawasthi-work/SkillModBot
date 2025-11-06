@@ -10,6 +10,7 @@ from discord.ext import commands
 from collections import defaultdict
 from math import prod
 from typing import Optional
+import asyncio
 import json
 
 # ---------------------------
@@ -483,6 +484,7 @@ async def slash_compare(interaction: discord.Interaction, team_a: str,
     await interaction.followup.send(embed=embed)
 
 
+# /savepreset name: <username> heroes: <hero name>:<hero count>, <hero name>: <hero count>
 @tree.command(name="savepreset", description="Save a team preset under a name")
 @app_commands.describe(name="Preset name",
                        heroes="Heroes list, e.g. Chenko:4,Amane:2")
@@ -498,6 +500,7 @@ async def savepreset(interaction: discord.Interaction, name: str, heroes: str):
                                             ephemeral=True)
 
 
+# /loadpreset name: <username>
 @tree.command(name="loadpreset",
               description="Load a saved preset and calculate it")
 @app_commands.describe(name="Preset name")
@@ -522,6 +525,7 @@ async def loadpreset(interaction: discord.Interaction, name: str):
                                                 ephemeral=True)
 
 
+# /listpresets
 @tree.command(name="listpresets", description="List your saved team presets")
 async def listpresets(interaction: discord.Interaction):
     names = list_user_presets(str(interaction.user.id))
