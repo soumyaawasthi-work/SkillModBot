@@ -536,11 +536,13 @@ async def on_ready():
     print(f"✅ Bot logged in as {bot.user} (id: {bot.user.id})")
     try:
         if GUILD:
-            await tree.sync(guild=GUILD)
-            print(f"✅ Synced commands to guild {GUILD_ID}")
+            print(f"Attempting to sync commands to guild {GUILD_ID}...")
+            synced = await tree.sync(guild=GUILD)
+            print(f"✅ Synced {len(synced)} commands to guild {GUILD_ID}")
         else:
-            await tree.sync()
-            print("✅ Synced global commands (may take up to an hour).")
+            print("⚠️ GUILD not defined. Syncing globally (may take up to 1 hour)...")
+            synced = await tree.sync()
+            print(f"✅ Synced {len(synced)} global commands")
     except Exception as e:
         print("❌ Failed to sync slash commands:", e)
 
