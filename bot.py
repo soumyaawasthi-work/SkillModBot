@@ -541,23 +541,25 @@ async def listpresets(interaction: discord.Interaction):
 # ---------------------------
 # Register / sync on ready
 # ---------------------------
-GUILD_ID = os.getenv("GUILD_ID")
-GUILD = discord.Object(id=int(GUILD_ID)) if GUILD_ID else None
 
 @bot.event
 async def on_ready():
     print(f"Bot logged in as {bot.user} (id: {bot.user.id})")
+
     try:
-        if GUILD:
-            await tree.sync(guild=GUILD)
-            print(f"Slash commands synced to guild {GUILD_ID}")
-        else:
-            await tree.sync()
-            print(
-                "Global slash commands synced (may take up to an hour to appear)."
-            )
+        guild_id = os.getenv("GUILD_ID")
+        if not guild_id:
+            print("❌ No GUILD_ID found in environment variables.")
+            return
+
+        guild_id_int = int(guild_id)
+        guild = discord.Object(id=guild_id_int)
+
+        synced = await tree.sync(guild=guild)
+        print(f"✅ Synced {len(synced)} commands to guild {guild_id_int}")
+
     except Exception as e:
-        print("Failed to sync slash commands:", e)
+        print(f"❌ Failed to sync slash commands: {e}")
 
 
 # ---------------------------
