@@ -218,6 +218,14 @@ def parse_compact_string(s: str):
     return hero_counts
 
 def adapt_skillmod_for_embed(res):
+    # convert flat (cat, op) -> value dict into nested {cat: {op: val}}
+    per_op_flat = res["components"]["per_op"]
+    per_op_nested = {}
+    for (cat, op), val in per_op_flat.items():
+        if cat not in per_op_nested:
+            per_op_nested[cat] = {}
+        per_op_nested[cat][op] = val * 100  # convert to percent for display
+
     return {
         "damage_factor": res["SkillMod"],
         "defense_factor": res["FinalDamageTakenMultiplier"],
@@ -225,7 +233,7 @@ def adapt_skillmod_for_embed(res):
         "defenseup_factor": res["components"]["DefenseUpFactor"],
         "oppdefensedown_factor": res["components"]["OppDefenseDownFactor"],
         "oppdamagedown_factor": res["components"]["OppDamageDownFactor"],
-        "effect_op_totals": res["components"]["per_op"],
+        "effect_op_totals": per_op_nested,
     }
 
 # ---------------------------
