@@ -228,6 +228,7 @@ tree = bot.tree
 # Optional: use a guild for fast command registration; set GUILD_ID in env if desired
 GUILD_ID = os.getenv("GUILD_ID")
 GUILD = discord.Object(id=int(GUILD_ID)) if GUILD_ID else None
+guild_param = [GUILD] if GUILD else None
 
 
 # ---------------------------
@@ -322,7 +323,7 @@ def build_skillmod_embed(invoker_name: str, hero_counts: dict, res: dict):
 
 # /help
 @tree.command(name="help_skillmod",
-              description="Show help for the SkillMod calculator")
+              description="Show help for the SkillMod calculator", guilds=guild_param)
 async def help_skillmod(interaction: discord.Interaction):
     await interaction.response.send_message(
         "**SkillMod Bot Help**\n\n"
@@ -340,7 +341,7 @@ async def help_skillmod(interaction: discord.Interaction):
 
 
 # /hero <name>
-@tree.command(name="hero", description="Get info about a specific joiner hero")
+@tree.command(name="hero", description="Get info about a specific joiner hero", guilds=guild_param)
 @app_commands.describe(name="Hero name")
 @app_commands.autocomplete(name=hero_autocomplete)
 async def slash_hero(interaction: discord.Interaction, name: str):
@@ -367,7 +368,7 @@ async def slash_hero(interaction: discord.Interaction, name: str):
 
 # /skillmod with up to 4 hero slots (each optional). Autocomplete for each hero
 @tree.command(name="skillmod",
-              description="Calculate SkillMod for up to 4 joiner heroes")
+              description="Calculate SkillMod for up to 4 joiner heroes", guilds=guild_param)
 @app_commands.describe(
     hero1="Hero 1",
     count1="Count for hero 1",
@@ -427,7 +428,7 @@ async def slash_skillmod(
 
 # /compare team_a team_b
 @tree.command(name="compare",
-              description="Compare two teams. Use format: Chenko:4,Amane:2")
+              description="Compare two teams. Use format: Chenko:4,Amane:2", guilds=guild_param)
 @app_commands.describe(team_a="Team A (e.g. Chenko:4,Amane:2)",
                        team_b="Team B (e.g. Chenko:2,Amane:2)")
 async def slash_compare(interaction: discord.Interaction, team_a: str,
@@ -473,7 +474,7 @@ async def slash_compare(interaction: discord.Interaction, team_a: str,
 
 
 # /savepreset name: <username> heroes: <hero name>:<hero count>, <hero name>: <hero count>
-@tree.command(name="savepreset", description="Save a team preset under a name")
+@tree.command(name="savepreset", description="Save a team preset under a name", guilds=guild_param)
 @app_commands.describe(name="Preset name",
                        heroes="Heroes list, e.g. Chenko:4,Amane:2")
 async def savepreset(interaction: discord.Interaction, name: str, heroes: str):
@@ -490,7 +491,7 @@ async def savepreset(interaction: discord.Interaction, name: str, heroes: str):
 
 # /loadpreset name: <username>
 @tree.command(name="loadpreset",
-              description="Load a saved preset and calculate it")
+              description="Load a saved preset and calculate it", guilds=guild_param)
 @app_commands.describe(name="Preset name")
 async def loadpreset(interaction: discord.Interaction, name: str):
     saved = load_user_preset(str(interaction.user.id), name)
@@ -514,7 +515,7 @@ async def loadpreset(interaction: discord.Interaction, name: str):
 
 
 # /listpresets
-@tree.command(name="listpresets", description="List your saved team presets")
+@tree.command(name="listpresets", description="List your saved team presets", guilds=guild_param)
 async def listpresets(interaction: discord.Interaction):
     names = list_user_presets(str(interaction.user.id))
     if not names:
