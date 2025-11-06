@@ -554,7 +554,7 @@ async def on_ready():
 
         guild_id_int = int(guild_id)
         guild = discord.Object(id=guild_id_int)
-
+        print(f"Attempting to sync commands to guild {guild_id_int}")
         synced = await tree.sync(guild=guild)
         print(f"✅ Synced {len(synced)} commands to guild {guild_id_int}")
 
