@@ -198,16 +198,40 @@ async def skillmod(ctx, *args):
     for (cat, op), tot in comp["per_op"].items():
         per_op_lines.append(f"{cat} op{op}: {tot*100:.1f}% (sum for that op)")
 
+    # --- Friendly Summary ---
+    summary_lines = []
+
+    if res["Damage%Increase"] > 0:
+        summary_lines.append(
+            f"💥 **You’ll deal about {res['Damage%Increase']:.0f}% more damage** than normal."
+        )
+    else:
+        summary_lines.append("😐 **Your damage stays about the same.**")
+
+    if res["DamageTaken%Change"] < 0:
+        summary_lines.append(
+            f"🛡️ **You’ll take about {abs(res['DamageTaken%Change']):.0f}% less damage** thanks to defense buffs."
+        )
+    elif res["DamageTaken%Change"] > 0:
+        summary_lines.append(
+            f"⚠️ **You’ll take about {res['DamageTaken%Change']:.0f}% more damage** than usual."
+        )
+    else:
+        summary_lines.append("🛡️ **No change in damage taken.**")
+
+    # --- Detailed Breakdown ---
     reply = (
-        f"**SkillMod:** `{res['SkillMod']:.4f}`\n"
-        f"**Damage dealt:** `+{res['Damage%Increase']:.1f}%`\n"
-        f"**Damage taken:** `{res['FinalDamageTakenMultiplier']:.3f}×` ({res['DamageTaken%Change']:.1f}% change)\n\n"
-        f"**Components:**\n"
-        f"- DamageUp factor: {comp['DamageUpFactor']:.3f}\n"
-        f"- DefenseUp factor: {comp['DefenseUpFactor']:.3f}\n"
-        f"- OppDefenseDown factor: {comp['OppDefenseDownFactor']:.3f}\n"
-        f"- OppDamageDown factor: {comp['OppDamageDownFactor']:.3f}\n\n"
-        f"Per-effect_op sums:\n" + "\n".join(per_op_lines))
+        "**🧾 Quick Summary:**\n" + "\n".join(summary_lines) + "\n\n"
+        f"**SkillMod:** `{res['SkillMod']:.4f}` (how all buffs multiply together)\n"
+        f"**Damage Dealt:** `+{res['Damage%Increase']:.1f}%`\n"
+        f"**Damage Taken:** `{res['FinalDamageTakenMultiplier']:.3f}×` ({res['DamageTaken%Change']:.1f}% change)\n\n"
+        f"**Breakdown (for advanced players):**\n"
+        f"- DamageUp factor → how much your joiners boost attack: {comp['DamageUpFactor']:.3f}\n"
+        f"- DefenseUp factor → how much defense reduces damage: {comp['DefenseUpFactor']:.3f}\n"
+        f"- OppDefenseDown factor → how much you lower enemy defense: {comp['OppDefenseDownFactor']:.3f}\n"
+        f"- OppDamageDown factor → how much you weaken enemy attacks: {comp['OppDamageDownFactor']:.3f}\n\n"
+        f"**Per-effect_op totals:**\n" + "\n".join(per_op_lines))
+
     await ctx.send(reply)
 
 
