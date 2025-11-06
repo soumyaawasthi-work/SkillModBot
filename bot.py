@@ -74,6 +74,99 @@ def list_user_presets(user_id: str):
     presets = load_all_presets()
     return list(presets.get(user_id, {}).keys())
 
+# ---------------------------
+# Recommendation Management
+# ---------------------------
+
+
+RECOMMEND_CACHE_FILE = "recommend_cache.json"
+
+def load_recommend_cache():
+    """Load cached global best formations."""
+    if not os.path.exists(RECOMMEND_CACHE_FILE):
+        return {}
+    with open(RECOMMEND_CACHE_FILE, "r") as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return {}
+
+
+def save_recommend_cache(data):
+    """Save cached results."""
+    with open(RECOMMEND_CACHE_FILE, "w") as f:
+        json.dump(data, f)
+
+
+def parse_roster_string(roster_str):
+    """Parse 'Chenko:3,Amane:2' into dict."""
+    heroes = {}
+    parts = roster_str.split(",")
+    for p in parts:
+        if not p.strip():
+            continue
+        try:
+            name, count = p.split(":")
+            heroes[name.strip()] = int(count.strip())
+        except ValueError:
+            raise ValueError(f"Invalid format near '{p}'")
+    return heroes
+
+
+def generate_combinations(roster_counts, max_size=4):
+    """Generate all combinations within hero limits."""
+    names = list(roster_counts.keys())
+    combos = set()
+
+    def helper(prefix, start):
+        if len(prefix) == max_size:
+            combos.add(tuple(sorted(prefix)))
+            return
+        for i in range(start, len(names)):
+            hero = names[i]
+            if prefix.count(hero) < roster_counts[hero]:
+                helper(prefix + [hero], i)
+
+    helper([], 0)
+    return combos
+
+
+def get_best_formations(roster_counts=None):
+    """Compute best 2 formations for attack and garrison."""
+    all_heroes = roster_counts or {name: 4 for name in HERO_DATA.keys()}
+
+    combos = generate_combinations(all_heroes, max_size=4)
+    results = []
+
+    for combo in combos:
+        hero_counts = {h: combo.count(h) for h in set(combo)}
+        res = calculate_skillmod(hero_counts)
+        results.append({
+            "heroes": hero_counts,
+            "skillmod": res["skillmod"],
+            "damage_pct": res["damage_dealt_change"],
+            "taken_pct": res["damage_taken_change"],
+        })
+
+    # Attack ranking → highest damage%
+    best_attack = sorted(results, key=lambda x: x["damage_pct"], reverse=True)[:2]
+    # Garrison ranking → lowest damage taken%
+    best_garrison = sorted(results, key=lambda x: x["taken_pct"])[:2]
+
+    return best_attack, best_garrison
+
+
+def format_formations(sets):
+    lines = []
+    for i, s in enumerate(sets, 1):
+        heroes = ", ".join(f"{h}×{c}" for h, c in s["heroes"].items())
+        dmg = s["damage_pct"]
+        taken = s["taken_pct"]
+        sm = s["skillmod"]
+        lines.append(
+            f"**{i}.** {heroes} — SkillMod `{sm:.3f}×`\n💥 Damage: `{dmg:+.1f}%`, 🛡️ Damage Taken: `{taken:+.1f}%`"
+        )
+    return "\n\n".join(lines) if lines else "No valid formations found."
 
 # ---------------------------
 # Math functions (per article)
@@ -248,71 +341,92 @@ async def hero_autocomplete(interaction: discord.Interaction, current: str):
 # ---------------------------
 
 
-def build_skillmod_embed(invoker_name: str, hero_counts: dict, res: dict):
-    comp = res["components"]
-    per_op_lines = []
-    for (cat, op), tot in comp["per_op"].items():
-        per_op_lines.append(f"{cat} op{op}: {tot*100:.1f}% (sum for that op)")
+def build_skillmod_embed(username, hero_counts, result):
+    # Determine factors
+    damage_factor = result["damage_factor"]
+    defense_factor = result["defense_factor"]
 
-    # Friendly summary
-    summary_lines = []
-    if res["Damage%Increase"] > 0:
-        summary_lines.append(
-            f"💥 **You’ll deal about {res['Damage%Increase']:.0f}% more damage** than normal."
-        )
+    damage_change = (damage_factor - 1) * 100
+    defense_change = (1 - defense_factor) * 100
+
+    # ---------------------------
+    # Quick Summary
+    # ---------------------------
+    if abs(damage_change) < 0.01:
+        damage_line = "💥 You deal the same damage as a neutral (no-joiner) setup."
     else:
-        summary_lines.append("😐 **Your damage stays about the same.**")
+        damage_line = f"💥 You deal {damage_change:+.1f}% damage compared to a neutral setup."
 
-    if res["DamageTaken%Change"] < 0:
-        summary_lines.append(
-            f"🛡️ **You’ll take about {abs(res['DamageTaken%Change']):.0f}% less damage** thanks to defense buffs."
-        )
-    elif res["DamageTaken%Change"] > 0:
-        summary_lines.append(
-            f"⚠️ **You’ll take about {res['DamageTaken%Change']:.0f}% more damage** than usual."
-        )
+    if abs(defense_change) < 0.01:
+        defense_line = "🛡️ You take the same damage as a neutral (no-joiner) setup."
     else:
-        summary_lines.append("🛡️ **No change in damage taken.**")
+        defense_line = f"🛡️ You take {(-defense_change):+.1f}% damage compared to a neutral setup."
 
-    # Build embed
-    embed = discord.Embed(title="SkillMod Calculator",
-                          color=discord.Color.blurple())
-    embed.set_footer(text=f"Requested by {invoker_name}")
-    embed.add_field(name="Quick Summary",
-                    value="\n".join(summary_lines),
-                    inline=False)
+    summary = f"**Quick Summary**\n{damage_line}\n{defense_line}\n\n"
 
-    embed.add_field(name="SkillMod (multiplier)",
-                    value=f"`{res['SkillMod']:.4f}×`",
-                    inline=True)
-    embed.add_field(name="Damage dealt",
-                    value=f"`+{res['Damage%Increase']:.1f}%`",
-                    inline=True)
-    embed.add_field(
-        name="Damage taken",
-        value=
-        f"`{res['FinalDamageTakenMultiplier']:.3f}×` ({res['DamageTaken%Change']:.1f}% change)",
-        inline=True)
+    # ---------------------------
+    # SkillMod Multiplier Section
+    # ---------------------------
+    skillmod_section = (
+        f"**SkillMod (combined multiplier)**\n"
+        f"Damage dealt: **{damage_factor:.4f}×**\n"
+        f"Damage taken: **{defense_factor:.4f}×**\n\n"
+    )
 
-    embed.add_field(
-        name="Breakdown (advanced users)",
-        value=(f"- DamageUp factor: {comp['DamageUpFactor']:.3f}\n"
-               f"- DefenseUp factor: {comp['DefenseUpFactor']:.3f}\n"
-               f"- OppDefenseDown factor: {comp['OppDefenseDownFactor']:.3f}\n"
-               f"- OppDamageDown factor: {comp['OppDamageDownFactor']:.3f}"),
-        inline=False)
+    # ---------------------------
+    # Detailed Breakdown Section
+    # ---------------------------
+    breakdown = (
+        "**Breakdown (for advanced users)**\n"
+        f"DamageUp factor: {result['damageup_factor']:.3f}\n"
+        f"DefenseUp factor: {result['defenseup_factor']:.3f}\n"
+        f"OppDefenseDown factor: {result['oppdefensedown_factor']:.3f}\n"
+        f"OppDamageDown factor: {result['oppdamagedown_factor']:.3f}\n\n"
+    )
 
-    # show per-op lines truncated if too long
-    embed.add_field(name="Per-effect_op totals",
-                    value="\n".join(per_op_lines[:10]) or "—",
-                    inline=False)
+    # ---------------------------
+    # Per-effect_op Details
+    # ---------------------------
+    per_op = "**Per-effect_op totals**\n"
+    for eff, ops in result["effect_op_totals"].items():
+        for op, val in ops.items():
+            per_op += f"{eff} op{op}: {val:.1f}%\n"
+    per_op += "\n"
 
-    # footer note
-    embed.add_field(
-        name="Note",
-        value=
-        "Mixing different effect_op for the same effect multiplies benefits. See /help for examples.",
-        inline=False)
+    # ---------------------------
+    # Clarification Note
+    # ---------------------------
+    note = (
+        "_'Neutral' means a base setup with no joiner heroes on either side._\n"
+        "_Positive % = you deal or take more damage than neutral; "
+        "negative % = you deal or take less damage than neutral._"
+    )
+
+    # ---------------------------
+    # Determine Embed Color (contextual)
+    # ---------------------------
+    if damage_factor > 1.0 and defense_factor < 1.0:
+        color = discord.Color.gold()     # Strong offense & defense
+    elif damage_factor > 1.0:
+        color = discord.Color.red()      # Offensive boost
+    elif defense_factor < 1.0:
+        color = discord.Color.blue()     # Defensive boost
+    else:
+        color = discord.Color.dark_gray()  # Neutral / no major change
+
+    # ---------------------------
+    # Build Embed
+    # ---------------------------
+    embed = discord.Embed(
+        title=f"SkillMod Analysis for {username}",
+        description=summary + skillmod_section + breakdown + per_op + note,
+        color=color
+    )
+
+    # Add hero list field
+    hero_list = "\n".join(f"{h}: {c}" for h, c in hero_counts.items())
+    embed.add_field(name="Team Composition", value=hero_list or "None", inline=False)
+
     return embed
 
 
@@ -327,16 +441,38 @@ def build_skillmod_embed(invoker_name: str, hero_counts: dict, res: dict):
 async def help_skillmod(interaction: discord.Interaction):
     await interaction.response.send_message(
         "**SkillMod Bot Help**\n\n"
-        "Use `/skillmod` to calculate joiner effects. You can fill up to 6 hero slots.\n\n"
-        "**Usage examples:**\n"
-        "`/skillmod hero1: Chenko count1:4` — shows effect of 4 Chenkos\n"
-        "`/skillmod hero1:Chenko count1:2 hero2:Amane count2:2` — compares mixed effect_ops\n\n"
-        "Commands:\n"
-        "• `/skillmod` — calculate with up to 6 hero slots\n"
-        "• `/hero <name>` — show hero buff info\n"
-        "• `/compare team_a:<string> team_b:<string>` — compare two team strings (e.g. `Chenko:4`)\n\n"
-        "Tip: Use `/hero` or `/skillmod` hero autocomplete to avoid typos.\n"
-        "Note: Mixing different effect_op for the same effect gives multiplicative stacking (stronger).",
+"Use `/skillmod` to calculate how your joiner lineup affects battle performance.\n"
+"You can test different hero combinations, save your favorite teams, and even get AI-based formation recommendations.\n\n"
+
+"**🧮 Core Commands**\n"
+"• `/skillmod` — Calculate your SkillMod multiplier using up to 4 heroes.\n"
+"   👉 Example: `/skillmod hero1:Chenko count1:2 hero2:Amane count2:2`\n"
+"• `/hero <name>` — Show hero buff type, effect_op, and contribution.\n"
+"   👉 Example: `/hero Hilde`\n"
+"• `/compare team_a:<string> team_b:<string>` — Compare two team setups.\n"
+"   👉 Example: `/compare team_a:Chenko:4 team_b:Amane:2,Chenko:2`\n\n"
+
+"**💾 Preset Commands**\n"
+"• `/savepreset name:<name> heroes:<list>` — Save a team setup for later use.\n"
+"   👉 Example: `/savepreset name:AttackA heroes:Chenko:2,Amane:2`\n"
+"• `/loadpreset name:<name>` — Load and calculate a saved team.\n"
+"   👉 Example: `/loadpreset name:AttackA`\n"
+"• `/listpresets` — View all your saved team presets.\n\n"
+
+"**🤖 Recommendation Command**\n"
+"• `/recommend` — Suggests top 2 team formations for both Attack and Garrison.\n"
+"   👉 `/recommend` — shows global best 4-hero setups.\n"
+"   👉 `/recommend heroes:Chenko:3,Amane:2,Hilde:1` — suggests best teams using only heroes you own.\n\n"
+
+"**💡 Tips**\n"
+"• Mixing heroes with the same *effect* but **different effect_op** (e.g., Chenko & Amane) gives multiplicative stacking and higher SkillMod.\n"
+"• You can use `/hero` autocomplete to avoid typos.\n"
+"• Presets are saved per user, so each player can manage their own setups.\n"
+"• `/recommend` uses real SkillMod calculations — no assumptions or flat bonuses.\n\n"
+
+"**Summary:**\n"
+"Start with `/skillmod` to test your joiners → save good builds with `/savepreset` → and use `/recommend` to discover the best possible formations.",
+
         ephemeral=True)
 
 
@@ -527,6 +663,70 @@ async def listpresets(interaction: discord.Interaction):
                                             ephemeral=True)
 
 
+# /recommend
+@tree.command(
+    name="recommend",
+    description="Suggests top 2 team formations for attack and garrison. Use heroes:Chenko:3,Amane:2 to limit to your roster.", guilds=guild_param
+)
+@app_commands.describe(
+    heroes="(Optional) List your available heroes, e.g., Chenko:3,Amane:2"
+)
+async def recommend(interaction: discord.Interaction, heroes: str = None):
+    await interaction.response.defer(thinking=True)
+
+    cache = load_recommend_cache()
+    now = datetime.utcnow()
+
+    if heroes:
+        try:
+            roster_counts = parse_roster_string(heroes)
+        except ValueError as e:
+            await interaction.followup.send(str(e), ephemeral=True)
+            return
+        best_attack, best_garrison = get_best_formations(roster_counts)
+        roster_note = f"*(Based on your roster: {heroes})*"
+    else:
+        if "timestamp" in cache:
+            ts = datetime.fromisoformat(cache["timestamp"])
+            if now - ts < timedelta(days=1):
+                best_attack = cache["best_attack"]
+                best_garrison = cache["best_garrison"]
+            else:
+                best_attack, best_garrison = get_best_formations()
+                cache = {
+                    "timestamp": now.isoformat(),
+                    "best_attack": best_attack,
+                    "best_garrison": best_garrison,
+                }
+                save_recommend_cache(cache)
+        else:
+            best_attack, best_garrison = get_best_formations()
+            cache = {
+                "timestamp": now.isoformat(),
+                "best_attack": best_attack,
+                "best_garrison": best_garrison,
+            }
+            save_recommend_cache(cache)
+        roster_note = "*(Based on all heroes — cached global best)*"
+
+    embed = discord.Embed(
+        title="🔥 Recommended Formations",
+        description=roster_note,
+        color=discord.Color.gold(),
+    )
+    embed.add_field(
+        name="💥 Attack Focus (Damage Output)",
+        value=format_formations(best_attack),
+        inline=False,
+    )
+    embed.add_field(
+        name="🛡️ Garrison Focus (Damage Reduction)",
+        value=format_formations(best_garrison),
+        inline=False,
+    )
+
+    await interaction.followup.send(embed=embed)
+    
 # ---------------------------
 # Register / sync on ready
 # ---------------------------
@@ -539,6 +739,7 @@ async def on_ready():
     try:
         if GUILD:
             print(f"Attempting to sync commands to guild {GUILD_ID}...")
+            await tree.clear_commands(guild=GUILD)
             synced = await tree.sync(guild=GUILD)
             print(f"✅ Synced {len(synced)} commands to guild {GUILD_ID}")
         else:
