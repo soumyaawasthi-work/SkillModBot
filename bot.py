@@ -667,7 +667,7 @@ async def listpresets(interaction: discord.Interaction):
 # /recommend
 @tree.command(
     name="recommend",
-    description="Suggests top 2 team formations for attack and garrison. Use heroes:Chenko:3,Amane:2 to limit to your roster.", guilds=guild_param
+    description="Suggest best joiner setups for attack and garrison", guilds=guild_param
 )
 @app_commands.describe(
     heroes="(Optional) List your available heroes, e.g., Chenko:3,Amane:2"
@@ -740,7 +740,7 @@ async def on_ready():
     try:
         if GUILD:
             print(f"Attempting to sync commands to guild {GUILD_ID}...")
-            # tree.clear_commands(guild=GUILD)
+            tree.clear_commands(guild=GUILD)
             synced = await tree.sync(guild=GUILD)
             print(f"✅ Synced {len(synced)} commands to guild {GUILD_ID}")
         else:
