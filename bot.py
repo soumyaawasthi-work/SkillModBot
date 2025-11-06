@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 from collections import defaultdict
 from math import prod
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import asyncio
 import json
@@ -287,9 +287,9 @@ def get_best_formations(roster_counts=None):
         res = calculate_skillmod(hero_counts)
         results.append({
             "heroes": hero_counts,
-            "skillmod": res["skillmod"],
-            "damage_pct": res["damage_dealt_change"],
-            "taken_pct": res["damage_taken_change"],
+            "skillmod": res["SkillMod"],
+            "damage_pct": res["Damage%Increase"],
+            "taken_pct": res["DamageTaken%Change"],
         })
 
     # Attack ranking → highest damage%
@@ -677,7 +677,7 @@ async def recommend(interaction: discord.Interaction, heroes: str = None):
     await interaction.response.defer(thinking=True)
 
     cache = load_recommend_cache()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     if heroes:
         try:
